@@ -1,0 +1,83 @@
+package com.wecc
+
+case class MonitorType(id: String, desp: String)
+object MonitorType {
+  //A4XX => 校正, A9XX=>分鐘值
+  val list = List(
+    MonitorType("A214", "PM10"),
+    MonitorType("A222", "二氧化硫"),
+    MonitorType("A223", "氮氧化物"),
+    MonitorType("A283", "一氧化氮"),
+    MonitorType("A293", "二氧化氮"),
+    MonitorType("A224", "一氧化碳"),
+    MonitorType("A225", "臭氧"),
+    MonitorType("A224", "一氧化碳"),
+    MonitorType("A225", "臭氧"),
+    MonitorType("A227", "總碳氫化合物"),
+    MonitorType("C211", "風速"),
+    MonitorType("C212", "風向"),
+    MonitorType("C213", "降雨量"),
+    MonitorType("C214", "溫度"),
+    MonitorType("C215", "相對濕度"),
+    MonitorType("U201", "乙烷"),
+    MonitorType("U202", "乙烯"),
+    MonitorType("U203", "丙烷"),
+    MonitorType("U204", "丙烯"),
+    MonitorType("U205", "異丁烷"),
+    MonitorType("U206", "正丁烷"),
+    MonitorType("U207", "乙炔"),
+    MonitorType("U208", "反2-丁烯"),
+    MonitorType("U209", "1-丁烯"),
+    MonitorType("U210", "順2-丁烯"),
+    MonitorType("U211", "環戊烷"),
+    MonitorType("U212", "異戊烷"),
+    MonitorType("U213", "正戊烷"),
+    MonitorType("U214", "反2-戊烯"),
+    MonitorType("U215", "1-戊烯"),
+    MonitorType("U216", "順2-戊烯"),
+    MonitorType("U217", "2,2-二甲基丁烷"),
+    MonitorType("U218", "2,3-二甲基丁烷"),
+    MonitorType("U219", "2-甲基戊烷"),
+    MonitorType("U220", "3-甲基戊烷"),
+    MonitorType("U221", "異戊二烯"),
+    MonitorType("U222", "正己烷"),
+    MonitorType("U223", "甲基環戊烷"),
+    MonitorType("U224", "2,4-二甲基戊烷"),
+    MonitorType("U225", "苯"),
+    MonitorType("U226", "環己烷"),
+    MonitorType("U227", "2-甲基己烷"),
+    MonitorType("U228", "2,3-二甲基戊烷"),
+    MonitorType("U229", "3-甲基己烷"),
+    MonitorType("U230", "2,2,4-三甲基戊烷"),
+    MonitorType("U231", "正庚烷"),
+    MonitorType("U232", "甲基環己烷"),
+    MonitorType("U233", "2,3,4-三甲基戊烷"),
+    MonitorType("U234", "甲苯"),
+    MonitorType("U235", "2-甲基庚烷"),
+    MonitorType("U236", "3-甲基庚烷"),
+    MonitorType("U237", "正辛烷"),
+    MonitorType("U238", "乙苯"),
+    MonitorType("U239", "間,對二甲苯"),
+    MonitorType("U240", "苯乙烯"),
+    MonitorType("U241", "鄰二甲苯"),
+    MonitorType("U242", "正壬烷"),
+    MonitorType("U243", "異丙基苯"),
+    MonitorType("U244", "正丙基苯"),
+    MonitorType("U245", "間-乙基甲苯"),
+    MonitorType("U246", "對-乙基甲苯"),
+    MonitorType("U247", "1,3,5-三甲基苯"),
+    MonitorType("U248", "鄰-乙基甲苯"),
+    MonitorType("U249", "1,2,4-三甲基苯"),
+    MonitorType("U250", "葵烷"),
+    MonitorType("U251", "1,2,3-三甲基苯"),
+    MonitorType("U252", "間-二乙基苯"),
+    MonitorType("U253", "對-二乙基苯"),
+    MonitorType("U254", "正十一烷"))
+
+  val map = {
+    val pair =
+      list map { mt => mt.id -> mt }
+
+    pair.toMap
+  }
+}
