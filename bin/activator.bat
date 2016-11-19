@@ -52,7 +52,7 @@ rem Detect if we were double clicked, although theoretically A user could
 rem manually run cmd /c
 for %%x in (%cmdcmdline%) do if %%~x==/c set DOUBLECLICKED=1
 
-set SBT_HOME=%BIN_DIRECTORY
+set SBT_HOME=%BIN_DIRECTORY%
 
 rem Detect if we were double clicked, although theoretically A user could
 rem manually run cmd /c
