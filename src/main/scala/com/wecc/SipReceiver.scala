@@ -59,9 +59,7 @@ case class SipRecord(monitorId: String, monitorTypeId: String, time: Long, value
 case class SipCalibration(monitorId: String, monitorTypeId: String, startTime: Long, endTime: Long,
                           span: Double, zero_std: Double, zero_val: Double, span_std: Double, span_val: Double)
 
-import javax.inject.Inject
-import play.api.libs.ws.WSClient
-import scala.concurrent.Future
+import scala.concurrent.{ Future, Promise }
 
 class SipReceiver extends Actor with ActorLogging {
   import SipReceiver._
@@ -80,10 +78,10 @@ class SipReceiver extends Actor with ActorLogging {
     case ex: com.typesafe.config.ConfigException =>
       "C:/Users/user/Desktop/特殊性工業區/DATBAK"
   }
-  
-  val noUpload = try{
+
+  val noUpload = try {
     sipConfig.getBoolean("noUpload")
-  }catch{
+  } catch {
     case ex: com.typesafe.config.ConfigException =>
       true
   }
@@ -92,7 +90,7 @@ class SipReceiver extends Actor with ActorLogging {
   log.info(s"SipReceiver: path=$path")
   log.info(s"noUpload=$noUpload")
   log.info(s"parsedFileList=${parsedFileList.length}")
-  
+
   def receive = {
     case ParseXML =>
       try {
@@ -106,6 +104,12 @@ class SipReceiver extends Actor with ActorLogging {
 
       context.system.scheduler.scheduleOnce(scala.concurrent.duration.Duration(1, scala.concurrent.duration.MINUTES), self, ParseXML)
   }
+
+  import play.api.libs.ws.ahc.AhcWSClient
+  import akka.stream.ActorMaterializer
+  implicit val materializer = ActorMaterializer()
+
+  val wsClient = AhcWSClient()
 
   import java.io.File
   def parser(f: File) = {
@@ -211,16 +215,12 @@ class SipReceiver extends Actor with ActorLogging {
 
     def fakeUpload = {
       Future {
-        None
+        List(true)
       }
     }
 
     def upload(recordType: RecordType.Value) = {
-      import play.api.libs.ws.ahc.AhcWSClient
-      import akka.stream.ActorMaterializer
-      implicit val materializer = ActorMaterializer()
 
-      val wsClient = AhcWSClient()
       val url = recordType match {
         case RecordType.calibration =>
           "/Calibration"
@@ -233,33 +233,58 @@ class SipReceiver extends Actor with ActorLogging {
       import play.api.libs.json._
       implicit val dataListWrite = Json.writes[SipRecord]
       implicit val calibrationWrite = Json.writes[SipCalibration]
-      val json = recordType match {
+      val jsonList = recordType match {
         case RecordType.calibration =>
-          Json.toJson(calibrationList)
+          log.debug(s"# of calibration ${calibrationList.length}")
+          val dataList = calibrationList.grouped(100).toList          
+          dataList map{ Json.toJson(_)}
         case RecordType.minData =>
-          Json.toJson(minDataList)
+          val dataList = minDataList.grouped(100).toList
+          log.debug(s"# of min dataList ${dataList.length}")
+          dataList map{ Json.toJson(_)}
         case RecordType.hourData =>
-          Json.toJson(hourDataList)
+          log.debug(s"# of hour dataList ${hourDataList.length}")
+          List(Json.toJson(hourDataList))
       }
 
-      val request = wsClient.url(s"$sipServer$url").post(json)
-      request map {
-        ret =>
-          val ok = (ret.json \ "Ok").as[Boolean]
-          Console.println(s"ret=${ret.status}")
+      val requestList = jsonList map {wsClient.url(s"$sipServer$url").post(_)}
+      val requestFuture = Future.sequence(requestList)
+      val p = Promise[Boolean]()
+      val resultF = p.future
+      import play.mvc.Http.Status
+      
+      requestFuture map {
+        responseList =>
+          val statusList = responseList map {_.status} 
 
+          if(statusList.forall { _ == Status.OK }){
+            try{
+              val okList = responseList map {resp => (resp.json \ "Ok").as[Boolean]}
+              if(okList.forall { _ => true })
+                p.success(true)
+              else{
+                log.info("server is too busy. Try later...")
+                p.success(false)
+              }
+            }catch{
+              case ex:Throwable=>
+                log.error(ex, "failed to get response")
+                p.success(false)
+            }
+          }else{
+            for(resp <- responseList)
+              log.error(s"response ${resp.status}:${resp.statusText}")
+              
+            p.success(false)
+          }
       }
-      request.onFailure({
+      requestFuture.onFailure({
         case ex: Throwable =>
-          Console.println(ex, "request failed")
+          log.error(ex, "request failed")
+          p.failure(ex)
       })
 
-      request.onComplete { x =>
-        log.info("wsClient closed.")
-        wsClient.close()
-      }
-
-      request
+      resultF
     }
 
     def uploadData = {
@@ -278,33 +303,45 @@ class SipReceiver extends Actor with ActorLogging {
       val retF = List(f1, f2, f3).flatMap { p => p }
       Future.sequence(retF)
     }
-    
-    if(noUpload)
+
+    if (noUpload)
       fakeUpload
     else
       uploadData
   }
 
-  def parseAllXml[R](dir: String)(parser: (File) => Future[R]) = {
+  def parseAllXml(dir: String)(parser: (File) => Future[List[Boolean]]) = {
 
     def listAllFiles = {
       //import java.io.FileFilter
       val allFiles = new java.io.File(dir).listFiles().toList
-      
-      allFiles.filter( p=> !parsedFileList.contains(p.getName))
+
+      allFiles.filter(p => p != null && !parsedFileList.contains(p.getName))
     }
 
     val files = listAllFiles
     for (f <- files) {
       if (f.getName.endsWith("P01_A") || f.getName.endsWith("P01_P")) {
         log.info(s"parse ${f.getName}")
-        val retF = parser(f)
-        for (ret <- retF) {
-          appendToParsedFileList(f.getName)
+        try {
+          val resultF = parser(f)
+
+          for (result <- resultF){
+            if(result.forall { _ == true })
+              appendToParsedFileList(f.getName)
+          }  
+        } catch {
+          case ex: Throwable =>
+            log.error(ex, "skip buggy file")
         }
+        Thread.sleep(2000)
       } else {
         f.delete()
       }
     }
+  }
+
+  override def postStop = {
+    wsClient.close()
   }
 }
