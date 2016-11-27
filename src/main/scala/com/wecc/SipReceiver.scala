@@ -50,7 +50,25 @@ object SipReceiver {
       case ex: Throwable =>
         Console.println(ex.getMessage)
     }
+  }
 
+  val RequestLimit = 50
+  var outstandingRequest = 0
+
+  def decOutstandingRequest = {
+    this.synchronized {
+      outstandingRequest -= 1
+    }
+  }
+
+  def canSendRequest = {
+    this.synchronized {
+      if (outstandingRequest <= RequestLimit) {
+        outstandingRequest += 1
+        true
+      } else
+        false
+    }
   }
 
 }
@@ -230,51 +248,66 @@ class SipReceiver extends Actor with ActorLogging {
           "/HourData"
       }
 
+      def splitByMonitorTime(dataList: List[SipRecord]): List[List[SipRecord]] = {
+        if (dataList.isEmpty)
+          Nil
+        else {
+          val head = dataList.head
+          val minRecord = dataList.takeWhile { x =>
+            x.monitorId == head.monitorId && x.time == head.time
+          }
+          minRecord :: splitByMonitorTime(dataList.drop(minRecord.length))
+        }
+      }
+
       import play.api.libs.json._
       implicit val dataListWrite = Json.writes[SipRecord]
       implicit val calibrationWrite = Json.writes[SipCalibration]
       val jsonList = recordType match {
         case RecordType.calibration =>
-          log.debug(s"# of calibration ${calibrationList.length}")
-          val dataList = calibrationList.grouped(100).toList          
-          dataList map{ Json.toJson(_)}
+          val dataList = calibrationList.grouped(100).toList
+          dataList map { Json.toJson(_) }
         case RecordType.minData =>
-          val dataList = minDataList.grouped(100).toList
-          log.debug(s"# of min dataList ${dataList.length}")
-          dataList map{ Json.toJson(_)}
+          val orderList = minDataList.reverse
+          val dataList = splitByMonitorTime(orderList)
+          dataList map { Json.toJson(_) }
         case RecordType.hourData =>
-          log.debug(s"# of hour dataList ${hourDataList.length}")
-          List(Json.toJson(hourDataList))
+          val orderList = hourDataList.reverse
+          val dataList = splitByMonitorTime(orderList)
+          dataList map { Json.toJson(_) }
       }
 
-      val requestList = jsonList map {wsClient.url(s"$sipServer$url").post(_)}
+      val requestList = jsonList map {
+        Thread.sleep(200)
+        wsClient.url(s"$sipServer$url").post(_)
+      }
       val requestFuture = Future.sequence(requestList)
       val p = Promise[Boolean]()
       val resultF = p.future
       import play.mvc.Http.Status
-      
+
       requestFuture map {
         responseList =>
-          val statusList = responseList map {_.status} 
+          val statusList = responseList map { _.status }
 
-          if(statusList.forall { _ == Status.OK }){
-            try{
-              val okList = responseList map {resp => (resp.json \ "Ok").as[Boolean]}
-              if(okList.forall { _ => true })
+          if (statusList.forall { _ == Status.OK }) {
+            try {
+              val okList = responseList map { resp => (resp.json \ "Ok").as[Boolean] }
+              if (okList.forall { _ => true })
                 p.success(true)
-              else{
+              else {
                 log.info("server is too busy. Try later...")
                 p.success(false)
               }
-            }catch{
-              case ex:Throwable=>
+            } catch {
+              case ex: Throwable =>
                 log.error(ex, "failed to get response")
                 p.success(false)
             }
-          }else{
-            for(resp <- responseList)
+          } else {
+            for (resp <- responseList)
               log.error(s"response ${resp.status}:${resp.statusText}")
-              
+
             p.success(false)
           }
       }
@@ -326,15 +359,14 @@ class SipReceiver extends Actor with ActorLogging {
         try {
           val resultF = parser(f)
 
-          for (result <- resultF){
-            if(result.forall { _ == true })
+          for (result <- resultF) {
+            if (result.forall { _ == true })
               appendToParsedFileList(f.getName)
-          }  
+          }
         } catch {
           case ex: Throwable =>
             log.error(ex, "skip buggy file")
         }
-        Thread.sleep(2000)
       } else {
         f.delete()
       }
