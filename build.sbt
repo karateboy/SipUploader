@@ -1,12 +1,12 @@
 name := """SipUploader"""
 
-version := "1.0"
+version := "1.1"
 
 scalaVersion := "2.11.8"
 
 libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play-ws" % "2.5.10",
-  "com.github.nscala-time" %% "nscala-time" % "2.14.0")
+  "com.github.nscala-time" %% "nscala-time" % "2.16.0")
 
 scalacOptions += "-feature"
 scalacOptions += "-deprecation"
